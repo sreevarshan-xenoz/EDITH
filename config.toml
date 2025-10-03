@@ -1,0 +1,28 @@
+# LLM Wrapper Configuration
+
+default_model = "llama3.2"
+base_url = "http://localhost:11434"
+
+# Models that support vision/image input
+vision_models = [
+    "llava",
+    "bakllava", 
+    "moondream",
+    "vision",
+    "qwen-vl"
+]
+
+# Models that support thinking/reasoning
+thinking_models = [
+    "o1",
+    "reasoning", 
+    "thinking",
+    "qwen2.5-coder"
+]
+
+# Model aliases for convenience
+[model_aliases]
+llama = "llama3.2"
+vision = "llava"
+smart = "llama3.2:70b"
+coder = "qwen2.5-coder"
