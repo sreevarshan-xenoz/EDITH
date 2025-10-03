@@ -212,10 +212,63 @@ class LLMWrapper:
     
     def switch_model(self, model_name: str):
         """Switch to a different model"""
+        # Check if it's an alias
+        if model_name in self.config.get('model_aliases', {}):
+            model_name = self.config['model_aliases'][model_name]
+        
         self.model = model_name
         self._detect_capabilities()
         print(f"Switched to {model_name}")
         print(f"Capabilities: Vision={self.capabilities.supports_vision}, Thinking={self.capabilities.supports_thinking}")
+    
+    def pull_model(self, model_name: str) -> bool:
+        """Pull/download a model"""
+        try:
+            print(f"Pulling model {model_name}...")
+            response = requests.post(
+                f"{self.base_url}/api/pull",
+                json={"name": model_name},
+                stream=True,
+                timeout=300
+            )
+            
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        data = json.loads(line.decode('utf-8'))
+                        if 'status' in data:
+                            print(f"\r{data['status']}", end='', flush=True)
+                        if data.get('completed'):
+                            print(f"\n✅ Model {model_name} pulled successfully")
+                            return True
+                    except json.JSONDecodeError:
+                        continue
+            
+        except Exception as e:
+            print(f"❌ Error pulling model: {e}")
+            return False
+    
+    def delete_model(self, model_name: str) -> bool:
+        """Delete a model"""
+        try:
+            response = requests.delete(f"{self.base_url}/api/delete", json={"name": model_name})
+            if response.status_code == 200:
+                print(f"✅ Model {model_name} deleted")
+                return True
+            else:
+                print(f"❌ Failed to delete model: {response.text}")
+                return False
+        except Exception as e:
+            print(f"❌ Error deleting model: {e}")
+            return False
+    
+    def health_check(self) -> bool:
+        """Check if the LLM server is healthy"""
+        try:
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            return response.status_code == 200
+        except:
+            return False
 
 
 if __name__ == "__main__":
