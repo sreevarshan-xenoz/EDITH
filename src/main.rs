@@ -65,13 +65,13 @@ async fn main() -> anyhow::Result<()> {
             wrapper.delete_model(&model).await?;
         }
         Some(Commands::Chat) => {
-            interactive_mode(wrapper).await?;
+            interactive_mode(wrapper, cli.model.clone()).await?;
         }
         Some(Commands::Info { model }) => {
             let model_name = model.as_deref().unwrap_or(&cli.model);
             wrapper.switch_model(model_name).await?;
             let caps = wrapper.capabilities();
-            println!("Model: {}", caps.model_name);
+            println!("Model: {}", model_name);
             println!("Vision: {}", if caps.supports_vision { "✅" } else { "❌" });
             println!("Thinking: {}", if caps.supports_thinking { "✅" } else { "❌" });
             println!("Streaming: {}", if caps.supports_streaming { "✅" } else { "❌" });
@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("{}", response);
             } else {
                 // Interactive mode
-                interactive_mode(wrapper).await?;
+                interactive_mode(wrapper, cli.model.clone()).await?;
             }
         }
     }
@@ -91,11 +91,11 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn interactive_mode(mut wrapper: LLMWrapper) -> anyhow::Result<()> {
+async fn interactive_mode(mut wrapper: LLMWrapper, model_name: String) -> anyhow::Result<()> {
     use std::io::{self, Write};
     
     let caps = wrapper.capabilities();
-    println!("🤖 Connected to: {}", caps.model_name);
+    println!("🤖 Connected to: {}", model_name);
     println!("📷 Vision: {} | 🧠 Thinking: {} | 💬 Streaming: {}", 
         if caps.supports_vision { "✅" } else { "❌" },
         if caps.supports_thinking { "✅" } else { "❌" },
@@ -139,7 +139,7 @@ async fn interactive_mode(mut wrapper: LLMWrapper) -> anyhow::Result<()> {
                         match wrapper.switch_model(parts[1]).await {
                             Ok(_) => {
                                 let caps = wrapper.capabilities();
-                                println!("✅ Switched to: {}", caps.model_name);
+                                println!("✅ Switched to: {}", parts[1]);
                             }
                             Err(e) => println!("❌ Error: {}", e),
                         }

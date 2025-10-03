@@ -15,31 +15,14 @@ pub mod template;
 pub mod ui;
 pub mod error;
 pub mod config;
+pub mod backends;
 
 // Re-exports
 pub use error::{WrapperError, BackendError, ConfigError};
 pub use config::EnhancedConfig;
+pub use backends::{Backend, BackendType, ModelInfo, ModelCapabilities, OllamaBackend, MockBackend};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelCapabilities {
-    pub model_name: String,
-    pub supports_vision: bool,
-    pub supports_thinking: bool,
-    pub supports_streaming: bool,
-    pub max_tokens: u32,
-}
 
-impl Default for ModelCapabilities {
-    fn default() -> Self {
-        Self {
-            model_name: String::new(),
-            supports_vision: false,
-            supports_thinking: false,
-            supports_streaming: true,
-            max_tokens: 4096,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -113,7 +96,7 @@ struct MessageResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct ModelInfo {
+struct OllamaModelInfo {
     models: Vec<ModelEntry>,
 }
 
@@ -126,7 +109,7 @@ pub struct LLMWrapper {
     client: Client,
     base_url: String,
     model: String,
-    capabilities: ModelCapabilities,
+    capabilities: crate::backends::ModelCapabilities,
     config: Config,
 }
 
@@ -139,7 +122,7 @@ impl LLMWrapper {
             client,
             base_url,
             model: model.to_string(),
-            capabilities: ModelCapabilities::default(),
+            capabilities: crate::backends::ModelCapabilities::default(),
             config,
         };
         
@@ -153,10 +136,11 @@ impl LLMWrapper {
         let response = self.client.get(&url).send().await?;
         
         if response.status().is_success() {
-            let model_info: ModelInfo = response.json().await?;
+            let model_info: OllamaModelInfo = response.json().await?;
             
             if let Some(current_model) = model_info.models.iter().find(|m| m.name.contains(&self.model)) {
-                self.capabilities.model_name = current_model.name.clone();
+                // Note: The new ModelCapabilities doesn't have model_name field
+                // We'll need to track this separately or modify the structure
                 let model_name_lower = current_model.name.to_lowercase();
                 
                 // Check for vision capabilities
@@ -174,7 +158,7 @@ impl LLMWrapper {
         Ok(())
     }
     
-    pub fn capabilities(&self) -> &ModelCapabilities {
+    pub fn capabilities(&self) -> &crate::backends::ModelCapabilities {
         &self.capabilities
     }
     
@@ -183,7 +167,7 @@ impl LLMWrapper {
         let response = self.client.get(&url).send().await?;
         
         if response.status().is_success() {
-            let model_info: ModelInfo = response.json().await?;
+            let model_info: OllamaModelInfo = response.json().await?;
             Ok(model_info.models.into_iter().map(|m| m.name).collect())
         } else {
             Err(anyhow!("Failed to fetch models"))
