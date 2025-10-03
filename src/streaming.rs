@@ -6,6 +6,15 @@ use serde::{Deserialize, Serialize};
 
 pub type StreamId = u64;
 
+#[derive(Debug, Clone)]
+pub struct StreamingConfig {
+    pub max_concurrent_streams: usize,
+    pub requests_per_second: f64,
+    pub connection_timeout: std::time::Duration,
+    pub request_timeout: std::time::Duration,
+    pub pool_max_idle_per_host: usize,
+}
+
 #[derive(Debug, Error)]
 pub enum StreamError {
     #[error("Connection failed: {0}")]
@@ -67,23 +76,34 @@ pub struct StreamingManager {
 pub struct RateLimiter {
     max_concurrent: usize,
     current_count: usize,
+    // Token bucket for rate limiting
+    tokens: f64,
+    max_tokens: f64,
+    refill_rate: f64, // tokens per second
+    last_refill: std::time::Instant,
 }
 
 impl RateLimiter {
-    pub fn new(max_concurrent: usize) -> Self {
+    pub fn new(max_concurrent: usize, requests_per_second: f64) -> Self {
         Self {
             max_concurrent,
             current_count: 0,
+            tokens: requests_per_second,
+            max_tokens: requests_per_second,
+            refill_rate: requests_per_second,
+            last_refill: std::time::Instant::now(),
         }
     }
 
-    pub fn can_proceed(&self) -> bool {
-        self.current_count < self.max_concurrent
+    pub fn can_proceed(&mut self) -> bool {
+        self.refill_tokens();
+        self.current_count < self.max_concurrent && self.tokens >= 1.0
     }
 
     pub fn acquire(&mut self) -> bool {
         if self.can_proceed() {
             self.current_count += 1;
+            self.tokens -= 1.0;
             true
         } else {
             false
@@ -95,19 +115,61 @@ impl RateLimiter {
             self.current_count -= 1;
         }
     }
+
+    fn refill_tokens(&mut self) {
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(self.last_refill).as_secs_f64();
+        
+        if elapsed > 0.0 {
+            let new_tokens = elapsed * self.refill_rate;
+            self.tokens = (self.tokens + new_tokens).min(self.max_tokens);
+            self.last_refill = now;
+        }
+    }
+
+    pub fn get_stats(&self) -> RateLimiterStats {
+        RateLimiterStats {
+            current_concurrent: self.current_count,
+            max_concurrent: self.max_concurrent,
+            available_tokens: self.tokens,
+            max_tokens: self.max_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RateLimiterStats {
+    pub current_concurrent: usize,
+    pub max_concurrent: usize,
+    pub available_tokens: f64,
+    pub max_tokens: f64,
 }
 
 impl StreamingManager {
     pub fn new(max_concurrent_streams: usize) -> Self {
+        Self::with_config(StreamingConfig {
+            max_concurrent_streams,
+            requests_per_second: 10.0,
+            connection_timeout: std::time::Duration::from_secs(10),
+            request_timeout: std::time::Duration::from_secs(30),
+            pool_max_idle_per_host: 10,
+        })
+    }
+
+    pub fn with_config(config: StreamingConfig) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(config.request_timeout)
+            .connect_timeout(config.connection_timeout)
+            .pool_max_idle_per_host(config.pool_max_idle_per_host)
+            .pool_idle_timeout(std::time::Duration::from_secs(90))
+            .tcp_keepalive(std::time::Duration::from_secs(60))
             .build()
             .expect("Failed to create HTTP client");
 
         Self {
             client,
             active_streams: HashMap::new(),
-            rate_limiter: RateLimiter::new(max_concurrent_streams),
+            rate_limiter: RateLimiter::new(config.max_concurrent_streams, config.requests_per_second),
             next_stream_id: 1,
         }
     }
@@ -159,18 +221,7 @@ impl StreamingManager {
     ) -> Result<(), StreamError> {
         use futures_util::StreamExt;
 
-        let response = client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(StreamError::Connection(format!(
-                "HTTP error: {}",
-                response.status()
-            )));
-        }
+        let response = Self::send_request_with_retry(&client, &url, &request, 3).await?;
 
         let mut stream = response.bytes_stream();
 
@@ -236,6 +287,49 @@ impl StreamingManager {
     pub fn get_active_streams(&self) -> Vec<StreamId> {
         self.active_streams.keys().copied().collect()
     }
+
+    async fn send_request_with_retry(
+        client: &reqwest::Client,
+        url: &str,
+        request: &ChatRequest,
+        max_retries: u32,
+    ) -> Result<reqwest::Response, StreamError> {
+        let mut attempt = 0;
+        let mut delay = std::time::Duration::from_millis(100);
+
+        loop {
+            match client.post(url).json(request).send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        return Ok(response);
+                    } else if response.status().is_server_error() && attempt < max_retries {
+                        // Retry on server errors
+                        attempt += 1;
+                        tokio::time::sleep(delay).await;
+                        delay *= 2; // Exponential backoff
+                        continue;
+                    } else {
+                        return Err(StreamError::Connection(format!(
+                            "HTTP error: {}",
+                            response.status()
+                        )));
+                    }
+                }
+                Err(_e) if attempt < max_retries => {
+                    // Retry on connection errors
+                    attempt += 1;
+                    tokio::time::sleep(delay).await;
+                    delay *= 2; // Exponential backoff
+                    continue;
+                }
+                Err(e) => return Err(StreamError::Http(e)),
+            }
+        }
+    }
+
+    pub fn get_rate_limiter_stats(&mut self) -> RateLimiterStats {
+        self.rate_limiter.get_stats()
+    }
 }
 
 #[cfg(test)]
@@ -247,12 +341,13 @@ mod tests {
     async fn test_streaming_manager_creation() {
         let manager = StreamingManager::new(5);
         assert_eq!(manager.get_active_streams().len(), 0);
-        assert_eq!(manager.rate_limiter.max_concurrent, 5);
+        let stats = manager.rate_limiter.get_stats();
+        assert_eq!(stats.max_concurrent, 5);
     }
 
     #[tokio::test]
     async fn test_rate_limiter() {
-        let mut limiter = RateLimiter::new(2);
+        let mut limiter = RateLimiter::new(2, 10.0);
         
         assert!(limiter.acquire());
         assert!(limiter.acquire());
