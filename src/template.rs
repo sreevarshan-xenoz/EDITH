@@ -938,7 +938,7 @@ mod tests {
         
         let context = json!({});
         
-        let result = engine.render_with_defaults("test_template", &context);
+        let result = engine.render_with_defaults("test_template", context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello Anonymous!");
     }

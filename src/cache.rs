@@ -953,7 +953,7 @@ mod tests {
         assert_eq!(stream.id, 123);
         
         // Should be able to receive tokens from the cached stream
-        let first_token = timeout(Duration::from_secs(1), stream.receiver.recv()).await;
+        let first_token = tokio::time::timeout(Duration::from_secs(1), stream.receiver.recv()).await;
         assert!(first_token.is_ok());
         assert!(first_token.unwrap().is_some());
     }
