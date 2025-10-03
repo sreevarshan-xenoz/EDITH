@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use thiserror::Error;
@@ -54,6 +53,7 @@ pub struct ChatRequest {
 pub struct Message {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<String>>,
 }
 
@@ -99,8 +99,13 @@ impl RateLimiter {
 
 impl StreamingManager {
     pub fn new(max_concurrent_streams: usize) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("Failed to create HTTP client");
+
         Self {
-            client: reqwest::Client::new(),
+            client,
             active_streams: HashMap::new(),
             rate_limiter: RateLimiter::new(max_concurrent_streams),
             next_stream_id: 1,
@@ -129,6 +134,7 @@ impl StreamingManager {
         let client = self.client.clone();
         let url = format!("{}/api/chat", base_url);
         let token = cancellation_token.clone();
+
         
         tokio::spawn(async move {
             let result = Self::stream_chat(client, url, request, sender, token).await;
@@ -229,5 +235,78 @@ impl StreamingManager {
 
     pub fn get_active_streams(&self) -> Vec<StreamId> {
         self.active_streams.keys().copied().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::{timeout, Duration};
+
+    #[tokio::test]
+    async fn test_streaming_manager_creation() {
+        let manager = StreamingManager::new(5);
+        assert_eq!(manager.get_active_streams().len(), 0);
+        assert_eq!(manager.rate_limiter.max_concurrent, 5);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter() {
+        let mut limiter = RateLimiter::new(2);
+        
+        assert!(limiter.acquire());
+        assert!(limiter.acquire());
+        assert!(!limiter.acquire()); // Should fail, limit reached
+        
+        limiter.release();
+        assert!(limiter.acquire()); // Should work again
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_token() {
+        let token = CancellationToken::new();
+        assert!(!token.is_cancelled());
+        
+        token.cancel();
+        assert!(token.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn test_stream_token_serialization() {
+        let token = StreamToken {
+            content: "Hello, world!".to_string(),
+            is_complete: false,
+            metadata: Some(TokenMetadata {
+                timestamp: chrono::Utc::now(),
+                token_count: Some(42),
+            }),
+        };
+
+        let serialized = serde_json::to_string(&token).unwrap();
+        let deserialized: StreamToken = serde_json::from_str(&serialized).unwrap();
+        
+        assert_eq!(token.content, deserialized.content);
+        assert_eq!(token.is_complete, deserialized.is_complete);
+    }
+
+    #[tokio::test]
+    async fn test_chat_request_serialization() {
+        let request = ChatRequest {
+            model: "test-model".to_string(),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: "Hello".to_string(),
+                images: None,
+            }],
+            stream: true,
+            options: None,
+        };
+
+        let serialized = serde_json::to_string(&request).unwrap();
+        let deserialized: ChatRequest = serde_json::from_str(&serialized).unwrap();
+        
+        assert_eq!(request.model, deserialized.model);
+        assert_eq!(request.messages.len(), deserialized.messages.len());
+        assert_eq!(request.stream, deserialized.stream);
     }
 }
