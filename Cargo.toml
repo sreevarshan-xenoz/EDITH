@@ -14,3 +14,42 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 clap = { version = "4.0", features = ["derive"] }
 base64 = "0.21"
+
+# Async runtime and utilities
+tokio = { version = "1.0", features = ["full"] }
+tokio-util = "0.7"
+
+# Terminal UI
+ratatui = "0.24"
+crossterm = "0.27"
+
+# Template engine
+handlebars = "4.4"
+
+# Caching
+lru = "0.12"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "stream"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Async traits
+async-trait = "0.1"
+
+# Hashing for cache keys
+sha2 = "0.10"
+
+# Time utilities
+chrono = { version = "0.4", features = ["serde"] }
+humantime-serde = "1.1"
+
+# Configuration
+toml = "0.8"
+
+# Additional utilities
+futures-util = "0.3"
+mime_guess = "2.0"
+mime = "0.3"

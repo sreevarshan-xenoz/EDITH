@@ -1,12 +1,24 @@
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
-use futures_util::StreamExt;
+
 use mime_guess::from_path;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+
+// New modules
+pub mod streaming;
+pub mod cache;
+pub mod template;
+pub mod ui;
+pub mod error;
+pub mod config;
+
+// Re-exports
+pub use error::{WrapperError, BackendError, ConfigError};
+pub use config::EnhancedConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelCapabilities {
