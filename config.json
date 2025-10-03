@@ -1,0 +1,20 @@
+{
+  "default_model": "llama3.2",
+  "base_url": "http://localhost:11434",
+  "vision_models": [
+    "llava",
+    "bakllava", 
+    "moondream",
+    "llama3.2-vision"
+  ],
+  "thinking_models": [
+    "o1",
+    "reasoning",
+    "thinking"
+  ],
+  "model_aliases": {
+    "llama": "llama3.2",
+    "vision": "llava",
+    "smart": "llama3.2:70b"
+  }
+}
