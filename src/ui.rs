@@ -81,6 +81,9 @@ impl Default for AppState {
                 misses: 0,
                 total_entries: 0,
                 memory_usage_bytes: 0,
+                evictions: 0,
+                disk_writes: 0,
+                disk_reads: 0,
             },
             active_template: None,
         }
