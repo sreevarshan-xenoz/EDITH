@@ -53,3 +53,22 @@ toml = "0.8"
 futures-util = "0.3"
 mime_guess = "2.0"
 mime = "0.3"
+rand = "0.8"
+
+# Markdown and syntax highlighting
+pulldown-cmark = "0.9"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tracing-appender = "0.2"
+
+[dev-dependencies]
+# Testing and benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio-test = "0.4"
+tempfile = "3.8"
+
+[[bench]]
+name = "performance"
+harness = false

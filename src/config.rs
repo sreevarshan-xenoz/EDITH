@@ -53,14 +53,62 @@ impl EnhancedConfig {
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
+        // Validate backends
         if self.backends.is_empty() {
-            return Err(ConfigError::Invalid("At least one backend must be configured".to_string()));
+            return Err(ConfigError::Validation("At least one backend must be configured".to_string()));
         }
 
         for (name, backend) in &self.backends {
-            if backend.base_url.is_empty() {
-                return Err(ConfigError::Invalid(format!("Backend '{}' must have a base_url", name)));
+            if name.is_empty() {
+                return Err(ConfigError::Validation("Backend name cannot be empty".to_string()));
             }
+
+            if backend.base_url.is_empty() {
+                return Err(ConfigError::Validation(format!("Backend '{}' base_url cannot be empty", name)));
+            }
+
+            if backend.retry_attempts > 10 {
+                return Err(ConfigError::Validation(format!("Backend '{}' retry_attempts cannot exceed 10", name)));
+            }
+        }
+
+        // Validate cache config
+        if self.cache.max_memory_entries == 0 {
+            return Err(ConfigError::Validation("Cache max_memory_entries must be greater than 0".to_string()));
+        }
+
+        if self.cache.memory_pressure_threshold < 0.1 || self.cache.memory_pressure_threshold > 1.0 {
+            return Err(ConfigError::Validation("Cache memory_pressure_threshold must be between 0.1 and 1.0".to_string()));
+        }
+
+        // Validate streaming config
+        if self.streaming.max_concurrent_streams == 0 {
+            return Err(ConfigError::Validation("Streaming max_concurrent_streams must be greater than 0".to_string()));
+        }
+
+        if self.streaming.buffer_size < 1024 {
+            return Err(ConfigError::Validation("Streaming buffer_size must be at least 1024 bytes".to_string()));
+        }
+
+        // Validate UI config
+        if self.ui.max_history == 0 {
+            return Err(ConfigError::Validation("UI max_history must be greater than 0".to_string()));
+        }
+
+        // Validate logging config
+        let valid_levels = ["trace", "debug", "info", "warn", "error"];
+        if !valid_levels.contains(&self.logging.level.as_str()) {
+            return Err(ConfigError::Validation(format!("Invalid logging level '{}'. Valid levels: {:?}", self.logging.level, valid_levels)));
+        }
+
+        let valid_formats = ["text", "json"];
+        if !valid_formats.contains(&self.logging.format.as_str()) {
+            return Err(ConfigError::Validation(format!("Invalid logging format '{}'. Valid formats: {:?}", self.logging.format, valid_formats)));
+        }
+
+        let valid_outputs = ["stdout", "file", "both"];
+        if !valid_outputs.contains(&self.logging.output.as_str()) {
+            return Err(ConfigError::Validation(format!("Invalid logging output '{}'. Valid outputs: {:?}", self.logging.output, valid_outputs)));
         }
 
         Ok(())
@@ -97,6 +145,7 @@ pub enum BackendType {
     LMStudio,
     OpenAI,
     Custom,
+    Mock,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,28 +207,21 @@ impl Default for TemplateConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingConfig {
-    pub level: LogLevel,
-    pub file: Option<PathBuf>,
-    pub structured: bool,
+    pub level: String,
+    pub format: String,
+    pub output: String,
+    pub file_path: Option<String>,
 }
 
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
-            level: LogLevel::Info,
-            file: None,
-            structured: false,
+            level: "info".to_string(),
+            format: "text".to_string(),
+            output: "stdout".to_string(),
+            file_path: None,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LogLevel {
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

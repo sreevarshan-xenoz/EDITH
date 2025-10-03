@@ -22,6 +22,19 @@ pub enum BackendType {
     LMStudio,
     OpenAI,
     Custom,
+    Mock,
+}
+
+impl std::fmt::Display for BackendType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BackendType::Ollama => write!(f, "ollama"),
+            BackendType::LMStudio => write!(f, "lmstudio"),
+            BackendType::OpenAI => write!(f, "openai"),
+            BackendType::Custom => write!(f, "custom"),
+            BackendType::Mock => write!(f, "mock"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

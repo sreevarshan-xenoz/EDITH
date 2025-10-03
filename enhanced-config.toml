@@ -1,0 +1,49 @@
+# Enhanced LLM Wrapper Configuration
+
+[cache]
+max_memory_entries = 1000
+ttl = "1h"
+enable_persistence = true
+cache_streaming = true
+cache_dir = ".cache"
+max_memory_bytes = 104857600  # 100MB
+memory_pressure_threshold = 0.8
+
+[ui]
+theme = "default"
+syntax_highlighting = true
+auto_scroll = true
+max_history = 1000
+high_contrast = false
+
+[templates]
+template_dir = "templates"
+auto_reload = true
+custom_helpers = ["upper", "lower", "format_date", "json"]
+
+[logging]
+level = "info"
+format = "json"
+output = "stdout"
+file_path = "llm-wrapper.log"
+
+[streaming]
+max_concurrent_streams = 10
+buffer_size = 8192
+
+# Backend configurations
+[backends.ollama]
+backend_type = "Ollama"
+base_url = "http://localhost:11434"
+timeout = "30s"
+retry_attempts = 3
+
+[backends.ollama.rate_limit]
+max_concurrent = 5
+requests_per_minute = 60
+
+[backends.mock]
+backend_type = "Mock"
+base_url = "http://localhost:8080"
+timeout = "10s"
+retry_attempts = 1
