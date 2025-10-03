@@ -41,7 +41,7 @@ venv.bak/
 *.swp
 *.swo
 *~
-
+.kiro
 # OS
 .DS_Store
 .DS_Store?
