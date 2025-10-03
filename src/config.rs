@@ -52,7 +52,7 @@ impl EnhancedConfig {
         Ok(())
     }
 
-    fn validate(&self) -> Result<(), ConfigError> {
+    pub fn validate(&self) -> Result<(), ConfigError> {
         // Validate backends
         if self.backends.is_empty() {
             return Err(ConfigError::Validation("At least one backend must be configured".to_string()));
