@@ -1,88 +1,117 @@
-# Universal Local LLM Wrapper
+# 🦀 Universal LLM Wrapper (Rust)
 
-A flexible Python wrapper for local LLMs that automatically detects and adapts to model capabilities like vision input and thinking/reasoning features.
+Fast, zero-dependency CLI for local LLMs with automatic capability detection.
 
 ## Features
 
 - 🔍 **Auto-detection** of model capabilities (vision, thinking, streaming)
-- 📷 **Image support** for vision-enabled models (LLaVA, Moondream, etc.)
+- 📷 **Image support** for vision models (LLaVA, Moondream, etc.)
 - 🧠 **Thinking models** support (O1-style reasoning)
-- 💬 **Interactive CLI** with real-time streaming
-- 🔄 **Model switching** on the fly
-- ⚙️ **Configurable** endpoints and settings
+- 💬 **Interactive TUI** with real-time chat
+- ⚡ **Zero runtime dependencies** - single binary
+- 🔧 **Configurable** via TOML
 
-## Quick Start
+## Installation
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Build from source
+cargo build --release
 
-# Basic usage
-python chat_cli.py
+# The binary will be at target/release/llm
+```
+
+## Usage
+
+### Quick Chat
+```bash
+# Basic chat
+./llm "Hello, how are you?"
 
 # With specific model
-python chat_cli.py --model llava
+./llm -m llava "What's in this image?" -i photo.jpg
 
-# Single message with image
-python chat_cli.py --message "What's in this image?" --image photo.jpg
+# With system prompt
+./llm -s "You are a helpful coding assistant" "Explain Rust ownership"
+```
 
+### Interactive Mode
+```bash
+# Start interactive chat
+./llm chat
+
+# Or just run without arguments
+./llm
+```
+
+### Model Management
+```bash
 # List available models
-python chat_cli.py --list-models
+./llm list
+
+# Pull a new model
+./llm pull llava
+
+# Delete a model
+./llm delete old-model
+
+# Show model info
+./llm info llama3.2
 ```
 
-## Usage Examples
+## Interactive Commands
 
-### Interactive Chat
-```bash
-python chat_cli.py --model llama3.2
-```
-
-### With Images (Vision Models)
-```bash
-python chat_cli.py --model llava --image screenshot.png
-```
-
-### Programmatic Usage
-```python
-from llm_wrapper import LLMWrapper
-
-llm = LLMWrapper(model="llama3.2")
-
-# Basic chat
-response = llm.chat("Hello!")
-
-# With images
-response = llm.chat("Describe this image", images=["photo.jpg"])
-
-# Check capabilities
-caps = llm.get_capabilities()
-print(f"Vision: {caps.supports_vision}")
-```
-
-## CLI Commands
-
-In interactive mode:
+In chat mode:
 - `/image <path>` - Add image to next message
 - `/model <name>` - Switch model
 - `/clear` - Clear loaded images
-- `quit` or `q` - Exit
-
-## Supported Model Types
-
-### Vision Models
-- LLaVA variants
-- Moondream
-- BakLLaVA
-- Any model with "vision" in the name
-
-### Thinking Models
-- O1-style models
-- Models with "reasoning" or "thinking" in name
+- `/quit` or `/q` - Exit
 
 ## Configuration
 
-Edit `config.json` to customize:
-- Default models
-- Server endpoints
-- Model aliases
-- Capability detection patterns
+Edit `config.toml`:
+
+```toml
+default_model = "llama3.2"
+base_url = "http://localhost:11434"
+
+vision_models = ["llava", "moondream", "qwen-vl"]
+thinking_models = ["o1", "reasoning"]
+
+[model_aliases]
+smart = "llama3.2:70b"
+vision = "llava"
+```
+
+## Supported Backends
+
+- **Ollama** (default)
+- **LM Studio** (OpenAI-compatible API)
+- Any OpenAI-compatible endpoint
+
+## Examples
+
+```bash
+# Vision model with image
+./llm -m llava "Describe this screenshot" -i desktop.png
+
+# Thinking model for complex reasoning  
+./llm -m o1-preview "Solve this math problem step by step: ..."
+
+# Quick model switching
+./llm -m coder "Write a Rust function to parse JSON"
+```
+
+## Building
+
+```bash
+# Debug build
+cargo build
+
+# Release build (optimized)
+cargo build --release
+
+# Run tests
+cargo test
+```
+
+The release binary is completely self-contained - no Python, no dependencies, just works.
