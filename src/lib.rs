@@ -17,6 +17,7 @@ pub mod error;
 pub mod config;
 pub mod backends;
 pub mod logging;
+pub mod performance;
 
 // Re-exports
 pub use error::{WrapperError, BackendError, ConfigError};
@@ -26,6 +27,7 @@ pub use streaming::{StreamingManager, StreamResponse, StreamToken};
 pub use cache::{CacheManager, CacheStats};
 pub use template::{TemplateEngine, Template};
 pub use ui::{TerminalUI, ChatMessage, MessageRole};
+pub use performance::{PerformanceMonitor, PerformanceMetrics, PerformanceReport, PerformanceStatus};
 
 
 
@@ -315,6 +317,7 @@ pub struct EnhancedLLMWrapper {
     streaming_manager: StreamingManager,
     config: EnhancedConfig,
     metrics: MetricsCollector,
+    performance_monitor: performance::PerformanceMonitor,
     current_backend: String,
 }
 
@@ -467,6 +470,11 @@ impl EnhancedLLMWrapper {
             "EnhancedLLMWrapper initialized successfully"
         );
 
+        let performance_monitor = performance::PerformanceMonitor::new();
+        
+        // Start background performance monitoring
+        let _monitoring_task = performance_monitor.start_monitoring_task();
+
         Ok(Self {
             backends,
             cache_manager,
@@ -474,6 +482,7 @@ impl EnhancedLLMWrapper {
             streaming_manager,
             config,
             metrics: MetricsCollector::default(),
+            performance_monitor,
             current_backend,
         })
     }
@@ -493,15 +502,20 @@ impl EnhancedLLMWrapper {
             "Starting chat with template"
         );
 
-        // Render template with error recovery
+        // Render template with error recovery and performance monitoring
+        let template_start = std::time::Instant::now();
         let rendered_prompt = match self.template_engine.render(template_name, &variables) {
             Ok(prompt) => {
+                let duration = template_start.elapsed();
                 self.metrics.record_template_render();
+                self.performance_monitor.record_template_render(duration, true);
                 crate::logging::log_template_event("render", template_name, true);
                 prompt
             }
             Err(e) => {
+                let duration = template_start.elapsed();
                 self.metrics.record_error();
+                self.performance_monitor.record_template_render(duration, false);
                 crate::logging::log_template_event("render", template_name, false);
                 crate::logging::log_error(&e, "Template rendering");
                 return Err(WrapperError::Template(e));
@@ -515,10 +529,13 @@ impl EnhancedLLMWrapper {
             &std::collections::HashMap::new(),
         );
 
-        // Check cache first with error handling
+        // Check cache first with error handling and performance monitoring
+        let cache_start = std::time::Instant::now();
         match self.cache_manager.get(&cache_key).await {
             Some(cached_response) => {
+                let cache_duration = cache_start.elapsed();
                 self.metrics.record_cache_hit();
+                self.performance_monitor.record_cache_operation("lookup", cache_duration, true);
                 crate::logging::log_cache_event("hit", cache_key.prompt_hash, true);
                 
                 tracing::debug!("Cache hit for template: {}", template_name);
@@ -544,7 +561,9 @@ impl EnhancedLLMWrapper {
                 });
             }
             None => {
+                let cache_duration = cache_start.elapsed();
                 self.metrics.record_cache_miss();
+                self.performance_monitor.record_cache_operation("lookup", cache_duration, false);
                 crate::logging::log_cache_event("miss", cache_key.prompt_hash, false);
                 tracing::debug!("Cache miss for template: {}", template_name);
             }
@@ -714,6 +733,19 @@ impl EnhancedLLMWrapper {
 
     pub fn get_metrics(&self) -> &MetricsCollector {
         &self.metrics
+    }
+
+    pub fn get_performance_metrics(&self) -> performance::PerformanceMetrics {
+        self.performance_monitor.get_metrics()
+    }
+
+    pub fn get_performance_report(&self) -> performance::PerformanceReport {
+        self.performance_monitor.check_performance_targets()
+    }
+
+    pub async fn export_performance_metrics(&self, path: &str) -> Result<(), WrapperError> {
+        self.performance_monitor.export_metrics_to_file(path).await
+            .map_err(|e| WrapperError::Io(e))
     }
 
     pub fn list_templates(&self) -> Vec<&Template> {
